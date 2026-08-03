@@ -15,7 +15,6 @@ provider "oci" {
 variable "compartment_id" {
   description = "Root compartment (tenancy) OCID"
   type        = string
-  default     = "ocid1.tenancy.oc1..aaaaaaaaocn3mtjxa246277jmmycdigyr3bmvvdrs7ymxzrhb3zfs2egyeea"
 }
 
 variable "ssh_public_key_path" {
