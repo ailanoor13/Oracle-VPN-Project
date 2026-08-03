@@ -19,9 +19,9 @@ Spins up a cloud server on Oracle's free tier using Terraform (so it's all defin
 - [x] Terraform config for networking and the actual VM
 - [x] Ansible to auto-configure the server (WireGuard install, SSH lockdown, fail2ban)
 - [x] Client setup and connection test
-- [ ] GitHub Actions so infra changes get reviewed (terraform plan) before anything actually applies
-- [ ] Ansible Vault so no secrets/keys ever end up in this repo
-- [ ] Basic monitoring dashboard (Netdata) so I can see bandwidth/uptime
+- [x] GitHub Actions so infra changes get reviewed (terraform plan) before anything actually applies
+- [x] Ansible Vault so no secrets/keys ever end up in this repo
+- [x] Basic monitoring dashboard (Netdata) so I can see bandwidth/uptime
 - [ ] Actual threat model section, what this protects against, what it doesn't (spoiler: it's not protecting me from a nation-state, it's protecting me from campus IT blocking UDP traffic to Roblox)
 
 ## Progress log
@@ -64,14 +64,45 @@ Ran into a couple of errors here. First, WireGuard showed "Active" but almost no
 
 Once both were fixed, tested by checking whatismyipaddress.com while connected, it showed the server's IP (Oracle Corporation, Japan) instead of the home IP. Confirmed working. Also tested Roblox at home while connected, the app launched and ran fine through the tunnel.
 
+### Phase 4: Ansible Vault (secrets management)
+
+Before setting up Vault, did a check of what secrets were lying around and found one already exposed: my Oracle tenancy OCID was hardcoded in main.tf and had already been pushed to the public repo. Not a "someone can break in" level secret, more like an account label, but still shouldn't have been sitting in plain code. Fixed it by moving it into terraform.tfvars (gitignored) and confirmed with terraform plan that nothing broke ("No changes").
+
+Then actually set up Vault for real: created group_vars/vpn_server/vault.yml, an encrypted file storing the laptop's WireGuard public key, and updated wireguard.yml to pull it from there instead of hardcoding it.
+
+Funniest bug of the whole project so far: ansible-vault create dropped me straight into vim to type the file contents, and I had zero idea vim doesn't let you just start typing. Spent a solid minute stuck before learning you need i for insert mode, Esc to stop, then :wq to save. A truly ancient rite of passage, apparently.
+
+Confirmed it all worked by rerunning the playbook with --ask-vault-pass and getting failed=0, then reconnecting WireGuard on my laptop to make sure the tunnel still worked with the vault-sourced key.
+
+### Phase 5: CI/CD with GitHub Actions
+
+Set up GitHub to automatically run terraform plan every time I push, so I can see what would change before anything actually happens on Oracle. It only plans, never auto-applies, I still run terraform apply myself.
+
+Built this as .github/workflows/terraform.yml, triggered on push to main. Since GitHub's servers run this (not my laptop), it needs to authenticate to Oracle without real credentials sitting in the code, so I added five GitHub Secrets pulled from my local OCI config: OCI_PRIVATE_KEY, OCI_FINGERPRINT, OCI_TENANCY_OCID, OCI_USER_OCID, OCI_REGION.
+
+This phase had the most bugs back to back, three in a row:
+- Found my local OCI private key file had gotten corrupted with garbage text appended after the real key (no line break, just mashed together). Caught it with tail, fixed with sed to chop the bad line off, then copied the clean version into GitHub.
+- First real run got through authentication and even showed a plan, then failed looking for ~/.ssh/id_ed25519.pub. Made sense once I thought about it, that file only exists on my laptop, GitHub's runner is a brand new machine every time. Fixed by adding a sixth secret (SSH_PUBLIC_KEY, totally fine to store since public keys are meant to be public) and a workflow step that writes it to a file before Terraform runs.
+- Pushing the workflow file itself got flat out rejected the first time: my Personal Access Token didn't have the special "workflow" permission GitHub requires for anything touching .github/workflows/. Generated a new token with that scope checked, push went through.
+
+Confirmed it all actually worked by watching the Actions tab go from red X to a clean green checkmark, full terraform plan output and everything, using nothing but GitHub Secrets, no real credentials anywhere in the code.
+
+### Phase 6: monitoring with Netdata
+
+Wrote monitoring.yml to install Netdata via its official install script, same automated approach as everything else here. Deliberately did not expose the dashboard to the public internet, it only listens on 127.0.0.1, so viewing it means opening an SSH tunnel (ssh -L 19999:localhost:19999 ubuntu@SERVER_IP) and loading localhost:19999 in my own browser. No SSH access, no dashboard.
+
+Confirmed it's actually collecting real data (thousands of metrics tracked), and got to watch the live network graph spike in real time the moment I turned the WireGuard tunnel on, genuinely satisfying to see the whole pipeline prove itself end to end: client connects, tunnel carries traffic, server sees it, monitoring shows it.
+
+Small gotcha: turning the VPN on mid-session killed my already-open SSH tunnel, since it rewrote the routing table underneath it. Not a bug, just had to reconnect the tunnel after the VPN came up. Lesson: routing tables don't care about your feelings.
+
 ## Tools used so far
 
-Terraform, Ansible, Oracle Cloud Infrastructure (OCI CLI), WireGuard (server and official Windows client), fail2ban, WSL/Ubuntu
+Terraform, Ansible (incl. Ansible Vault), Oracle Cloud Infrastructure (OCI CLI), WireGuard (server and official Windows client), fail2ban, GitHub Actions, Netdata, WSL/Ubuntu
 
 ## What's next
 
-- Move to Phase 4: Ansible Vault for secrets
-- Then Phase 5: GitHub Actions CI/CD
+- Phase 7: write an actual threat model, what this setup protects against (campus wifi blocking/traffic shaping) vs what it doesn't (a nation-state is not currently interested in my Roblox habit)
+- Real-world test on actual campus wifi (works at home, which was never the point)
 - Keep this README updated as I go instead of dumping it all at the end
 
 ## Random lessons so far
@@ -83,3 +114,5 @@ The free tier isn't infinite, "Always Free" just means the resource tier is free
 Automating a setup step doesn't automatically make it safe. A bug in an Ansible playbook can silently corrupt data just as easily as doing it wrong by hand. Worth actually verifying what a task does, not just that it says "changed" or "ok."
 
 Same lesson showed up again with firewalls: a rule can be technically correct and still do nothing if it's sitting in the wrong order in the list. Order matters as much as content.
+
+Also apparently I will fight vim before I learn vim.

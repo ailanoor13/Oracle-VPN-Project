@@ -1,0 +1,38 @@
+---
+- name: Harden SSH configuration
+  hosts: vpn_server
+  become: true
+
+  tasks:
+    - name: Disable password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+
+    - name: Disable root login over SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin no"
+
+    - name: Validate SSH config before restarting
+      command: sshd -t
+      changed_when: false
+
+    - name: Restart SSH service
+      systemd:
+        name: ssh
+        state: restarted
+
+    - name: Install fail2ban
+      apt:
+        name: fail2ban
+        state: present
+        update_cache: true
+
+    - name: Ensure fail2ban is running and enabled
+      systemd:
+        name: fail2ban
+        enabled: true
+        state: started
