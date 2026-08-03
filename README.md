@@ -22,7 +22,7 @@ Spins up a cloud server on Oracle's free tier using Terraform (so it's all defin
 - [x] GitHub Actions so infra changes get reviewed (terraform plan) before anything actually applies
 - [x] Ansible Vault so no secrets/keys ever end up in this repo
 - [x] Basic monitoring dashboard (Netdata) so I can see bandwidth/uptime
-- [ ] Actual threat model section, what this protects against, what it doesn't (spoiler: it's not protecting me from a nation-state, it's protecting me from campus IT blocking UDP traffic to Roblox)
+- [x] Actual threat model section, what this protects against, what it doesn't (spoiler: it's not protecting me from a nation-state, it's protecting me from campus IT blocking UDP traffic to Roblox)
 
 ## Progress log
 
@@ -95,15 +95,28 @@ Confirmed it's actually collecting real data (thousands of metrics tracked), and
 
 Small gotcha: turning the VPN on mid-session killed my already-open SSH tunnel, since it rewrote the routing table underneath it. Not a bug, just had to reconnect the tunnel after the VPN came up. Lesson: routing tables don't care about your feelings.
 
+### Phase 7: threat model
+
+What this actually protects against:
+- University wifi identifying and blocking Roblox traffic specifically (by port, protocol, or domain), since WireGuard just looks like generic encrypted noise to anything inspecting the traffic
+- Basic network-level traffic shaping/throttling aimed at games or specific apps
+
+What this does NOT protect against, and was never meant to:
+- A targeted attacker, nation-state, or anyone actually trying to hack into something. This is a single free-tier VM running one service for one person. It's not hardened against serious, motivated attackers, just against a university firewall doing pattern matching.
+- My ISP or campus network seeing that I'm using a VPN at all. WireGuard hides what I'm doing, not that I'm doing something. Anyone watching network metadata could reasonably guess "this looks like VPN traffic," they just can't tell it's specifically Roblox.
+- Full anonymity. This isn't Tor, it's one server I control, in my name, on my own cloud account. If someone really wanted to know it was me, they could.
+- Anything happening on the server itself being 100% bulletproof forever. I did real hardening (SSH keys only, fail2ban, minimal open ports, no exposed monitoring dashboard), but "reasonably secured hobby VM" and "impenetrable fortress" are different things.
+
+Why this tradeoff is fine:
+The actual risk here is genuinely small, campus IT noticing unusual traffic and maybe asking questions, worst case. Nobody's coming after a college student's Roblox VPN with serious resources. So the hardening I did (SSH lockdown, fail2ban, Vault, no public monitoring) is less "defending against real threats" and more "practicing what real infrastructure security looks like," which was the actual point of the whole project.
+
 ## Tools used so far
 
 Terraform, Ansible (incl. Ansible Vault), Oracle Cloud Infrastructure (OCI CLI), WireGuard (server and official Windows client), fail2ban, GitHub Actions, Netdata, WSL/Ubuntu
 
 ## What's next
 
-- Phase 7: write an actual threat model, what this setup protects against (campus wifi blocking/traffic shaping) vs what it doesn't (a nation-state is not currently interested in my Roblox habit)
-- Real-world test on actual campus wifi (works at home, which was never the point)
-- Keep this README updated as I go instead of dumping it all at the end
+All 7 planned phases are done. What's left is really just the real-world test: actually trying this on campus wifi, since everything so far has only been tested at home (where Roblox already works fine, so it never proved anything about the actual blocking problem). Once that's confirmed, this project's genuinely complete and ready to share.
 
 ## Random lessons so far
 
