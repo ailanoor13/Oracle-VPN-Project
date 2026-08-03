@@ -78,7 +78,7 @@
         path: /etc/wireguard/wg0.conf
         line: |
           [Peer]
-          PublicKey = yeov1XnqtY0mhMb0oMXkSOqembwZdN3iNS286O2oYhU=
+          PublicKey = {{ vault_laptop_public_key }}
           AllowedIPs = 10.10.10.2/32
       notify: restart wireguard
   handlers:
